@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IA School</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="style.css?v=18">
+</head>
+<body>
+<header><h1>IA School</h1><button id="reset" hidden>Changer de thème</button></header>
+
+<main id="setup">
+  <section class="intro">
+    <p><b>Un tuteur qui te fait réviser en pratiquant.</b> Choisis ta matière et ton thème : il découpe le sujet en notions, te donne des exercices du plus simple au plus dur, et t'aide par indices sans te donner la réponse.</p>
+    <p class="note">Pour apprendre à programmer, écris <b>Python</b> en matière : un éditeur s'ouvre à côté du chat pour écrire, exécuter et envoyer ton code. Tu peux aussi joindre ton cours (photo ou PDF) pour que les exercices le suivent.</p>
+  </section>
+  <label>Code d'accès <input id="code" type="password" placeholder="(si demandé)"></label>
+  <label>Matière <input id="subject" list="subjects" placeholder="ex : Maths, Python, Français, Histoire…"></label>
+  <datalist id="subjects"><option>Maths</option><option>Python</option><option>Numérique</option><option>Physique-Chimie</option><option>Français</option><option>Histoire</option><option>Géographie</option><option>SVT</option><option>Anglais</option></datalist>
+  <label>Thématique <input id="theme" placeholder="ex : Fractions, Conjugaison, Révolution française…"></label>
+  <label>Niveau <select id="level"><option>Primaire</option><option selected>Collège</option><option>Lycée</option><option>Supérieur</option></select></label>
+  <label>Temps disponible en minutes (optionnel) <input id="minutes" type="number" min="5" max="180" placeholder="ex : 20"></label>
+  <label>Photos ou PDF de mon cours (optionnel)
+    <input id="files" type="file" accept="image/*,application/pdf" multiple>
+  </label>
+  <p id="fstatus" class="note"></p>
+  <label>Mon cours (texte, rempli automatiquement depuis les fichiers, modifiable) <textarea id="course" rows="4"></textarea></label>
+  <button id="start">Commencer</button>
+  <p id="err" class="err"></p>
+</main>
+
+<main id="chat" hidden>
+  <div id="prof"></div>
+  <ol id="plan" aria-label="Notions du cours"></ol>
+  <div id="timer" hidden></div>
+  <section id="ide" hidden>
+    <div class="ide-bar">
+      <div class="modes" role="tablist">
+        <button type="button" data-mode="texte" class="on">📝 Code</button>
+        <button type="button" data-mode="blocs">🧩 Blocs</button>
+      </div>
+      <span id="mode-tag" hidden></span>
+      <select id="lang"><option value="python">Python</option><option value="javascript">JavaScript</option></select>
+      <button type="button" id="run">▶ Exécuter</button>
+      <button type="button" id="submit-code" class="alt">📤 Envoyer au tuteur</button>
+    </div>
+    <textarea id="code-editor" spellcheck="false" autocomplete="off" placeholder="Écris ton code ici… (Ctrl+Entrée pour exécuter)"></textarea>
+    <div id="blocks-area" hidden>
+      <div id="blockly"></div>
+      <p id="blocks-note" class="note"></p>
+      <details id="py-preview"><summary>Voir le Python</summary><pre></pre></details>
+    </div>
+    <div id="paper" hidden>
+      <p>✍️ <b>Exercice sur papier</b> : écris ton programme à la main, sans ordinateur, puis prends ta feuille en photo. Ton écriture est transcrite telle quelle, erreurs comprises.</p>
+      <label class="paper-btn">📷 Photo de ma feuille <input id="paper-file" type="file" accept="image/*" capture="environment"></label>
+      <p id="paper-status" class="note"></p>
+      <pre id="paper-code" hidden></pre>
+    </div>
+    <details id="stdin-box"><summary>Entrées pour input() / prompt()</summary>
+      <textarea id="stdin" rows="2" placeholder="Une valeur par ligne"></textarea>
+    </details>
+    <pre id="output" aria-live="polite"></pre>
+    <div id="debug" hidden>
+      <div class="dbg-bar">
+        <span class="dbg-title">🔍 Pas à pas</span>
+        <button type="button" data-step="first" title="Début">⏮</button>
+        <button type="button" data-step="prev" title="Étape précédente">◀</button>
+        <span id="dbg-pos"></span>
+        <button type="button" data-step="next" title="Étape suivante">▶</button>
+        <button type="button" data-step="last" title="Fin">⏭</button>
+      </div>
+      <div id="dbg-line"></div>
+      <table id="dbg-vars"><tbody></tbody></table>
+    </div>
+  </section>
+  <div id="log"></div>
+  <div id="quick">
+    <button type="button" data-q="up">⏫ Trop facile</button>
+    <button type="button" data-q="skip">⏭ Passer</button>
+    <button type="button" data-q="dictee" id="q3">✍️ Dictée</button>
+    <button type="button" data-q="discu">💬 Discussion</button>
+    <button type="button" data-q="fin" id="q-fin" hidden>🏁 Finir la séance</button>
+  </div>
+  <form id="form">
+    <input id="input" autocomplete="off" placeholder="Ta réponse ou ta question…">
+    <button>Envoyer</button>
+  </form>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="usage.js?v=18"></script>
+<script src="app.js?v=18"></script>
+</body>
+</html>

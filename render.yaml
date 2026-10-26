@@ -1,0 +1,14 @@
+# IA School sur Render (offre gratuite) : New + > Blueprint > choisir ce dépôt.
+# Render demande ensuite les deux secrets ci-dessous (sync: false = jamais écrits dans le dépôt).
+services:
+  - type: web
+    name: ia-school
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ACCESS_CODE
+        sync: false

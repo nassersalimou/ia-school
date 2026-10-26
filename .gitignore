@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+.claude/
+.agents/
+# Documents de travail personnels
+struc_scr/
+futurecoder_exercices.md
+NOTES_TEST_ETUDIANT.md
