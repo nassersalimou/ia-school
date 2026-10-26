@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import tutor
+from . import english, tutor
 from .subjects import LEVELS, SUBJECTS
 
 app = FastAPI(title="IA School")
@@ -81,6 +81,23 @@ def chat(req: ChatRequest):
             req.minutes, req.elapsed,
         )
     except Exception as e:  # erreur Vertex / config
+        raise HTTPException(status_code=502, detail=f"Erreur IA : {e}")
+
+
+class EnglishRequest(BaseModel):
+    mode: str  # ecrit, oral, ecoute
+    level: str = "Lycée"
+    cefr: str = ""  # niveau CECRL estimé lors des tours précédents
+    topic: str = ""
+    words: int = 150  # expression écrite : longueur visée
+    messages: list[Message] = []
+
+
+@app.post("/api/english", dependencies=[Depends(check_access)])
+def english_turn(req: EnglishRequest):
+    try:
+        return english.reply(req.mode, req.level, req.cefr, req.topic, req.words, [m.model_dump() for m in req.messages])
+    except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erreur IA : {e}")
 
 

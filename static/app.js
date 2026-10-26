@@ -83,10 +83,19 @@ const seance = () => {
 const QUICK_LABEL = { up: "Trop facile", skip: "Passer", probleme: "Problème", dictee: "Dictée", discu: "Discussion", fin: "Finir la séance" };
 function summarize(d) {
   const list = Object.values(d.seances || {});
+  const en = Object.values(d.anglais || {});
   const icon = { mastered: "✅", current: "▶", todo: "○" };
+  const titles = [...list.map((x) => `${x.matiere} · ${x.theme}`), ...en.map((x) => `Anglais · ${x.mode}`)];
   return {
-    titre: list.length ? list.map((x) => `${x.matiere} · ${x.theme}`).join(" ; ") : "Aucune séance commencée",
-    sections: list.map((x) => ({
+    titre: titles.length ? titles.join(" ; ") : "Aucune séance commencée",
+    sections: [...en.map((x) => ({
+      titre: `Anglais · ${x.mode} · sujet : ${x.sujet}`,
+      points: [
+        `${x.echanges} échange${x.echanges > 1 ? "s" : ""}, niveau estimé ${x.niveau || "?"}`,
+        Object.keys(x.erreurs || {}).length ? `Erreurs : ${Object.entries(x.erreurs).map(([k, n]) => `${k} ×${n}`).join(", ")}` : "Aucune erreur relevée",
+        x.bilan ? `Bilan : ${x.bilan}` : "",
+      ].filter(Boolean),
+    })), ...list.map((x) => ({
       titre: `${x.matiere} · ${x.theme} (${x.niveau})`,
       points: [
         `${x.messages} message${x.messages > 1 ? "s" : ""} au tuteur, dont ${x.codes} code${x.codes > 1 ? "s" : ""} envoyé${x.codes > 1 ? "s" : ""}`,
@@ -95,7 +104,7 @@ function summarize(d) {
         x.lacunes && x.lacunes.length ? `Lacunes encore ouvertes : ${x.lacunes.join(", ")}` : "",
         Object.keys(x.rapides).length ? `Boutons utilisés : ${Object.entries(x.rapides).map(([q, n]) => `${QUICK_LABEL[q] || q} ×${n}`).join(", ")}` : "",
       ].filter(Boolean),
-    })),
+    }))],
   };
 }
 Usage.start("ia_school", summarize);
@@ -222,14 +231,14 @@ $("files").onchange = async () => {
   $("start").disabled = false;
 };
 
-function back() { $("chat").hidden = true; $("setup").hidden = false; $("reset").hidden = true; document.body.classList.remove("coding"); }
+function back() { $("chat").hidden = true; $("english").hidden = true; window.English && English.stop(); $("setup").hidden = false; $("reset").hidden = true; document.body.classList.remove("coding"); }
 
 // --- Éditeur de code : même détection que is_coding() côté serveur (app/subjects.py).
 const isCode = () => /\b(nsi|snt)\b|num[ée]rique|informatique|python|programm|javascript/i.test($("subject").value + " " + $("theme").value);
 let worker = null, killTimer = null, ranCode = null, loadedCode = "", runDone = null, running = null;
 // Modes d'exercice : texte (clavier), blocs (libre), puzzle (blocs imposés mélangés), papier (écrit à la main, photographié).
 let mode = "texte", paperCode = "";
-const V = "21"; // version des fichiers statiques (cache)
+const V = "24"; // version des fichiers statiques (cache)
 
 const script = (src) => new Promise((ok, ko) => {
   const s = document.createElement("script");
@@ -544,8 +553,29 @@ $("code-editor").onkeydown = (e) => {
   }
 };
 
+// Anglais : trois modes imposés (english.js) à la place du chat.
+const isEnglish = () => /\b(anglais|english)\b/i.test($("subject").value);
+const enMode = () => document.querySelector('input[name="en-mode"]:checked').value;
+function syncSetup() {
+  const en = isEnglish();
+  $("en-options").hidden = !en;
+  $("en-words-l").hidden = enMode() !== "ecrit";
+  for (const id of ["theme", "files", "minutes"]) $(id).closest("label").hidden = en;
+  $("course-l").hidden = en;
+  $("fstatus").hidden = en;
+}
+$("subject").addEventListener("input", syncSetup);
+document.querySelectorAll('input[name="en-mode"]').forEach((r) => r.addEventListener("change", syncSetup));
+syncSetup();
+
 $("start").onclick = () => {
   $("err").textContent = "";
+  if (isEnglish()) {
+    try { localStorage.setItem("code", $("code").value); } catch (e) {}
+    $("setup").hidden = true; $("chat").hidden = true; $("english").hidden = false; $("reset").hidden = false;
+    English.start({ mode: enMode(), topic: $("en-topic").value.trim(), words: Number($("en-words").value), school: $("level").value, headers });
+    return;
+  }
   if (!$("subject").value.trim() || !$("theme").value.trim()) { $("err").textContent = "Indique une matière et une thématique."; return; }
   try { localStorage.setItem("code", $("code").value); } catch (e) {}
   history = [];

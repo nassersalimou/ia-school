@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>IA School</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<link rel="stylesheet" href="style.css?v=21">
+<link rel="stylesheet" href="style.css?v=24">
 </head>
 <body>
 <header><h1>IA School</h1><button id="reset" hidden>Changer de thème</button></header>
@@ -25,7 +25,19 @@
     <input id="files" type="file" accept="image/*,application/pdf" multiple>
   </label>
   <p id="fstatus" class="note"></p>
-  <label>Mon cours (texte, rempli automatiquement depuis les fichiers, modifiable) <textarea id="course" rows="4"></textarea></label>
+  <section id="en-options" hidden>
+    <b>Anglais : choisis ton mode de travail</b>
+    <div class="en-modes">
+      <label class="en-mode"><input type="radio" name="en-mode" value="ecrit" checked><span>✍️ Expression écrite</span><small>Un sujet, ta rédaction, une correction détaillée et une note.</small></label>
+      <label class="en-mode"><input type="radio" name="en-mode" value="oral"><span>🗣️ Conversation orale</span><small>Tu parles au micro avec une IA qui parle anglais ; tes erreurs s'affichent à chaque réplique.</small></label>
+      <label class="en-mode"><input type="radio" name="en-mode" value="ecoute"><span>🎧 Compréhension orale</span><small>Écoute un texte lu en anglais, puis réponds aux questions.</small></label>
+    </div>
+    <label>Sujet (facultatif) <input id="en-topic" placeholder="ex : voyages, jeux vidéo, entretien d'embauche… (vide = l'IA choisit)"></label>
+    <label id="en-words-l">Longueur de la rédaction
+      <select id="en-words"><option value="60">Courte (environ 60 mots)</option><option value="120" selected>Moyenne (environ 120 mots)</option><option value="200">Longue (environ 200 mots)</option><option value="350">Très longue (environ 350 mots)</option></select>
+    </label>
+  </section>
+  <label id="course-l">Mon cours (texte, rempli automatiquement depuis les fichiers, modifiable) <textarea id="course" rows="4"></textarea></label>
   <button id="start">Commencer</button>
   <p id="err" class="err"></p>
 </main>
@@ -88,9 +100,58 @@
   </form>
 </main>
 
+<main id="english" hidden>
+  <div class="en-head">
+    <b id="en-title"></b>
+    <span class="chip" id="en-level"></span>
+    <button type="button" id="en-end" class="alt">🏁 Finir la séance</button>
+  </div>
+  <div id="en-log" aria-live="polite"></div>
+
+  <section id="en-write" class="en-panel" hidden>
+    <textarea id="en-text" rows="6" spellcheck="false" placeholder="Write your text here…"></textarea>
+    <div class="en-row">
+      <span id="en-count"></span>
+      <select id="en-words2" title="Longueur visée"><option value="60">~60 mots</option><option value="120">~120 mots</option><option value="200">~200 mots</option><option value="350">~350 mots</option></select>
+      <button type="button" id="en-submit">📤 Rendre ma copie</button>
+      <button type="button" id="en-newtopic" class="alt">🔄 Nouveau sujet</button>
+    </div>
+  </section>
+
+  <section id="en-talk" class="en-panel" hidden>
+    <div class="en-row">
+      <button type="button" id="en-mic" class="mic">🎤 Appuie pour parler</button>
+      <span id="en-live" class="note"></span>
+    </div>
+    <div class="en-row">
+      <select id="en-voice" title="Voix de l'IA"></select>
+      <select id="en-rate" title="Vitesse de la voix"><option value="0.8">Lent</option><option value="0.95" selected>Normal</option><option value="1.1">Rapide</option></select>
+      <label class="en-check"><input type="checkbox" id="en-showtext" checked> Afficher le texte de l'IA</label>
+    </div>
+    <form id="en-form" class="en-row"><input id="en-input" autocomplete="off" placeholder="…ou écris ta réplique en anglais"><button>Envoyer</button></form>
+    <p id="en-mic-note" class="note" hidden>La reconnaissance vocale n'est pas disponible dans ce navigateur : utilise Chrome ou Edge, ou écris tes répliques.</p>
+  </section>
+
+  <section id="en-listen" class="en-panel" hidden>
+    <div class="en-row">
+      <button type="button" id="en-play">▶ Écouter le texte</button>
+      <label class="en-check"><input type="checkbox" id="en-slow"> 🐢 Lentement</label>
+      <span id="en-plays" class="note"></span>
+      <button type="button" id="en-reveal" class="alt" hidden>📄 Voir le texte</button>
+    </div>
+    <pre id="en-passage" hidden></pre>
+    <textarea id="en-answers" rows="5" placeholder="1. …&#10;2. …&#10;3. …"></textarea>
+    <div class="en-row">
+      <button type="button" id="en-send-answers">📤 Envoyer mes réponses</button>
+      <button type="button" id="en-next" class="alt">➡️ Exercice suivant</button>
+    </div>
+  </section>
+</main>
+
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
-<script src="usage.js?v=21"></script>
-<script src="app.js?v=21"></script>
+<script src="usage.js?v=24"></script>
+<script src="english.js?v=24"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>
