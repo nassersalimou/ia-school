@@ -103,7 +103,7 @@ Usage.start("ia_school", summarize);
 async function send(text) {
   if (text) {
     history.push({ role: "user", content: text }); add("user", text);
-    const se = seance(); se.messages++; if (/^\[(CODE|CASSE)/.test(text)) se.codes++; Usage.save();
+    const se = seance(); se.messages++; if (/\[(CODE|CASSE)/.test(text)) se.codes++; Usage.save();
   }
   const first = !history.some((m) => m.role === "model");
   const wait = add("model", first ? "⏳ Le tuteur lit ton sujet et prépare le plan des notions… (environ 20 secondes)" : "⏳ Le tuteur réfléchit…", "wait");
@@ -190,7 +190,7 @@ const isCode = () => /\b(nsi|snt)\b|num[ée]rique|informatique|python|programm|j
 let worker = null, killTimer = null, ranCode = null, loadedCode = "", runDone = null, running = null;
 // Modes d'exercice : texte (clavier), blocs (libre), puzzle (blocs imposés mélangés), papier (écrit à la main, photographié).
 let mode = "texte", paperCode = "";
-const V = "18"; // version des fichiers statiques (cache)
+const V = "19"; // version des fichiers statiques (cache)
 
 const script = (src) => new Promise((ok, ko) => {
   const s = document.createElement("script");
@@ -220,6 +220,19 @@ function updateBlocksInfo() {
   $("blocks-note").textContent = notes.join(" ");
 }
 
+// Mode imposé par l'exercice en cours (choisi par le tuteur) : l'élève ne peut pas passer à l'autre.
+let imposed = "";
+const MODE_NAME = { texte: "en code", blocs: "en blocs", puzzle: "en casse-tête", papier: "sur papier" };
+function lockMode(m) {
+  imposed = m;
+  document.querySelectorAll(".modes button").forEach((b) => {
+    const ok = !m || b.dataset.mode === (m === "puzzle" ? "blocs" : m);
+    b.disabled = !ok;
+    b.title = ok ? "" : `Cet exercice se fait ${MODE_NAME[m]}`;
+  });
+  setMode(mode);
+}
+
 function setMode(m) {
   mode = m;
   hideTrace();
@@ -230,8 +243,8 @@ function setMode(m) {
   $("lang").hidden = m !== "texte";
   if (m !== "texte") $("lang").value = "python";
   document.querySelectorAll(".modes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === (blocks ? "blocs" : m)));
-  $("mode-tag").hidden = !(m === "puzzle" || m === "papier");
-  $("mode-tag").textContent = m === "puzzle" ? "🧩 Casse-tête" : "✍️ Sur papier";
+  $("mode-tag").hidden = !(m === "puzzle" || m === "papier" || imposed);
+  $("mode-tag").textContent = m === "puzzle" ? "🧩 Casse-tête" : m === "papier" ? "✍️ Sur papier" : `🔒 Exercice ${MODE_NAME[imposed] || ""}`;
   if (blocks && window.Blocs) { Blocs.resize(); updateBlocksInfo(); }
 }
 
@@ -379,6 +392,9 @@ function offerBlocks(msg, code) {
 async function applyTutor(j, msg) {
   const m = ["texte", "blocs", "puzzle", "papier"].includes(j.mode) ? j.mode : "";
   const code = j.code || "";
+  try { await applyMode(m, code, msg, j.blocks || []); } finally { if (m) lockMode(mode); }
+}
+async function applyMode(m, code, msg, palette) {
   try {
     if (m === "papier") {
       setMode("papier");
@@ -395,7 +411,7 @@ async function applyTutor(j, msg) {
         else if (code) offerCode(msg, code);
         return;
       }
-      if (m) Blocs.setToolbox(j.blocks || [], m === "puzzle");
+      if (m) Blocs.setToolbox(palette, m === "puzzle");
       if (m === "puzzle") { setMode("puzzle"); Blocs.puzzle(code); }
       else if (m === "blocs" && mode !== "blocs") { setMode("blocs"); Blocs.load(code); }
       else offerBlocks(msg, code);
@@ -415,6 +431,7 @@ async function applyTutor(j, msg) {
 document.querySelectorAll(".modes button").forEach((b) => {
   b.onclick = async () => {
     const target = b.dataset.mode;
+    if (b.disabled) return;
     if (target === mode || (target === "blocs" && mode === "puzzle")) return;
     try {
       if (target === "blocs") {
@@ -449,9 +466,11 @@ $("paper-file").onchange = async () => {
 };
 
 $("run").onclick = runCode;
-$("submit-code").onclick = async () => {
+// Le code de l'éditeur et sa sortie, au format lu par le tuteur. Exécute d'abord si besoin.
+let lastSentCode = null;
+async function codeMessage() {
   const code = currentCode().trim();
-  if (!code) return;
+  if (!code) return "";
   // Attend l'exécution en cours (Python met quelques secondes à charger la première fois) et exécute si besoin.
   if (running) await running;
   if (ranCode !== currentCode() && mode !== "papier") await runCode();
@@ -464,8 +483,15 @@ $("submit-code").onclick = async () => {
     puzzle: `[CASSE-TÊTE python${window.Blocs?.isPuzzle() ? (Blocs.solved() ? ", résolu : identique à la solution" : ", pas identique à la solution attendue") : ""}]`,
     papier: "[CODE MANUSCRIT python, transcrit depuis la photo de sa feuille]",
   }[mode];
-  send(`${tag}\n\`\`\`${lang}\n${code}\n\`\`\`\n[SORTIE]\n\`\`\`\n${sortie}\n\`\`\``);
+  lastSentCode = currentCode();
+  return `${tag}\n\`\`\`${lang}\n${code}\n\`\`\`\n[SORTIE]\n\`\`\`\n${sortie}\n\`\`\``;
+}
+$("submit-code").onclick = async () => {
+  const m = await codeMessage();
+  if (m) send(m);
 };
+// Un message tapé dans le chat emporte aussi le code s'il a changé : le tuteur voit toujours ce que l'élève a fait.
+const codeChanged = () => isCode() && currentCode().trim() && currentCode() !== lastSentCode && !(mode === "texte" && currentCode() === loadedCode);
 // Tab = 4 espaces, Entrée garde l'indentation (+4 après « : » ou « { »), Ctrl+Entrée exécute.
 $("code-editor").onkeydown = (e) => {
   const ed = e.target;
@@ -498,6 +524,7 @@ $("start").onclick = () => {
     setMode("texte");
     $("lang").value = /javascript|\bjs\b/i.test($("subject").value + " " + $("theme").value) ? "javascript" : "python";
     loadCode("");
+    lockMode("");
   }
   send("");
 };
@@ -519,4 +546,12 @@ document.querySelectorAll("#quick button").forEach((b) => {
     send(QUICK[b.dataset.q]);
   };
 });
-$("form").onsubmit = (e) => { e.preventDefault(); const t = $("input").value.trim(); if (t) { $("input").value = ""; send(t); } };
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  const t = $("input").value.trim();
+  if (!t) return;
+  $("input").value = "";
+  send(codeChanged() ? `${t}
+
+${await codeMessage()}` : t);
+};

@@ -103,7 +103,8 @@ MÉTHODE SCIENCES (faire d'abord, expliquer ensuite) :
 - Ton encourageant et concret : félicite la démarche, pas seulement le résultat."""
 
 CODING_METHOD = """
-PROGRAMMATION : l'élève a un ÉDITEUR à côté du chat. Il y exécute son code (Python ou JavaScript), voit la sortie et les messages d'erreur, et peut t'envoyer son code avec la sortie (message commençant par "[CODE ...]" suivi de "[SORTIE]").
+PROGRAMMATION : l'élève a un ÉDITEUR à côté du chat. Il y exécute son code (Python ou JavaScript), voit la sortie et les messages d'erreur. L'APPLICATION JOINT AUTOMATIQUEMENT son code et la sortie réelle ("[CODE ...]" puis "[SORTIE]") à ses messages, dès qu'il a écrit quelque chose de nouveau dans l'éditeur, même s'il tape juste « c'est fait ». Ne lui demande JAMAIS de recopier son code ni d'utiliser un format. Si un message dit « c'est fait » sans aucun [CODE], c'est que l'éditeur est vide : dis-lui d'écrire son programme dans l'éditeur à droite.
+- MODE IMPOSÉ : à CHAQUE nouvel exercice de programmation, remplis toujours `mode` ("texte", "blocs", "puzzle" ou "papier") : l'app verrouille ce mode, l'élève ne peut pas changer. Choisis-le selon l'objectif (blocs pour mémoriser la structure, texte pour écrire vraiment, papier en fin de séance).
 - PRATIQUE AVANT TOUT : privilégie les exercices où l'élève écrit, complète, modifie ou débogue un programme. Pas de QCM sauf rappel très rapide.
 - CHAMP `code` : tout code que l'élève doit exécuter ou modifier va dans `code` (il est chargé dans son éditeur, il remplace le contenu). Ne le recopie JAMAIS dans reply (ni en bloc de code) ; dans reply, écris seulement la consigne. Laisse `code` VIDE quand l'éditeur ne doit pas changer : indice, correction, réponse à un [CODE], discussion. Ne mets JAMAIS la solution corrigée dans `code` : c'est l'élève qui corrige son propre code. Seule exception : après "✅ Solution :", tu peux y mettre la solution complète.
 - EXERCICE TYPE (le plus fréquent) : un énoncé concret (« Écris un programme qui… ») + un EXEMPLE de sortie attendue dans un bloc de code (ex. pour 3 notes, afficher « Moyenne : 12.0 ») + « écris le code / construis les blocs pour obtenir ce résultat ». `code` vide (il part de zéro) ou un petit squelette. Il exécute, compare avec l'exemple, corrige et recommence autant qu'il veut, puis t'envoie son code avec « Envoyer au tuteur ».
@@ -292,6 +293,8 @@ Plan des notions, dans l'ordre (tiré du cours de l'élève) :
 
 
 CODE_BLOCK = re.compile(r"```[\w-]*\n(.*?)```", re.S)
+# Code de l'élève joint par l'app : « [CODE …] » (pas un casse-tête) suivi d'un bloc, n'importe où dans le message.
+STUDENT_CODE = re.compile(r"\[CODE[^\]]*\]\s*```[\w-]*\n(.*?)```", re.S)
 
 
 def _norm_code(code: str) -> str:
@@ -300,9 +303,9 @@ def _norm_code(code: str) -> str:
 
 def copied_from_tutor(messages: list[dict]) -> bool:
     """Vrai si le dernier code envoyé par l'élève est identique à un code que le tuteur a montré (recopie de la solution)."""
-    if not messages or messages[-1]["role"] != "user" or not messages[-1]["content"].startswith("[CODE"):
+    if not messages or messages[-1]["role"] != "user":
         return False
-    sent = CODE_BLOCK.search(messages[-1]["content"])
+    sent = STUDENT_CODE.search(messages[-1]["content"])
     if not sent or not _norm_code(sent.group(1)):
         return False
     shown = {_norm_code(c) for m in messages[:-1] if m["role"] != "user" for c in CODE_BLOCK.findall(m["content"])}
