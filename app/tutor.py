@@ -50,11 +50,18 @@ class CoursePlan(BaseModel):
     notions: list[PlannedNotion]
 
 
+class Feedback(BaseModel):
+    question: str = Field(description="Question de retour courte posée à l'élève, ou chaîne vide (cas le plus fréquent : pas de panneau)")
+    options: list[str] = Field(description="3 à 6 réponses courtes à cliquer (ex : « L'énoncé n'était pas clair », « Je préfère un QCM »). Liste vide si pas de question.")
+    multiple: bool = Field(description="True si l'élève peut cocher plusieurs réponses")
+
+
 class TutorTurn(BaseModel):
     reply: str = Field(description="Message à l'élève, en français, LaTeX entre $...$")
     code: str = Field(description="Programmation uniquement : code Python de départ (mode texte ou blocs), SOLUTION complète (mode puzzle) ou chaîne vide. Vide si l'éditeur ne doit pas changer.")
     mode: str = Field(description="Programmation uniquement : texte, blocs, puzzle ou papier pour un NOUVEL exercice ; chaîne vide pour ne rien changer (indice, correction, discussion, autres matières).")
     blocks: list[str] = Field(description="Modes blocs/puzzle : catégories de la palette autorisées parmi valeurs, afficher, operations, variables, boucles, conditions, listes, fonctions. Liste vide sinon.")
+    feedback: Feedback = Field(description="Panneau de retour cliquable affiché sous ton message. Le plus souvent vide (question \"\"). Voir RETOURS DE L'ÉLÈVE.")
     profile: Profile
 
 
@@ -74,6 +81,8 @@ Règles :
 - Erreur : trouve la cause, ajoute la notion dans gaps (open), corrige d'abord le petit point (micro-rappel + mini-exercice), puis reviens au plus gros. Quand c'est corrigé, passe-la en fixed.
 - Si l'élève fournit un cours (texte ci-dessous), appuie-toi dessus en priorité et cite-le ; complète avec tes connaissances.
 - Indices progressifs avant la solution. Toujours en français. Retourne le profil mis à jour à chaque tour.
+- RETOURS DE L'ÉLÈVE (champ feedback) : PARFOIS, pose une question de retour sous forme de panneau à cliquer pour savoir quoi corriger. Moments utiles : après 2 erreurs sur un même exercice ou un abandon (« Qu'est-ce qui t'a bloqué ? » : l'énoncé, la notion X, le calcul, la syntaxe, je n'ai pas d'idée de départ…), après une notion acquise ou un mini-projet (« C'était comment ? » : trop facile, bien, trop dur, je préfère des QCM, plus d'exemples, plus de pratique…), quand l'élève dit qu'il ne comprend pas. Au plus une fois tous les 4 messages, jamais deux fois de suite. Options concrètes, liées à ce qu'il vient de faire (nomme les notions), sans « Autre » (il peut toujours écrire). Ton message reste complet : le panneau s'ajoute dessous.
+- RÉPONSE À UN PANNEAU (message « [RETOUR] question → réponses ») : tiens-en compte immédiatement et dis en une phrase ce que tu changes. « trop dur » : baisse difficulty et repars d'un exercice plus guidé ; « trop facile » : monte ; « QCM » ou « plus d'exemples » : adapte le format des prochains exercices et note-le dans style ; une notion citée comme bloquante : ajoute-la dans gaps (open) et travaille-la avec un mini-exercice ciblé.
 {progress}
 {method}
 {timing}
@@ -312,6 +321,27 @@ def copied_from_tutor(messages: list[dict]) -> bool:
     return _norm_code(sent.group(1)) in shown
 
 
+FEEDBACK_MARK = "[PANNEAU DE RETOUR]"  # ajouté par l'app dans l'historique quand un panneau a été affiché
+STRUGGLE = re.compile(r"(compren\w*|compris|sais)(\s+\w+)?\s+pas|trop dur|bloqu|perdu|aide[- ]moi|Error:|Erreur", re.I)
+FEEDBACK_NOTE = ("\n[NOTE DU SYSTÈME : ce tour-ci, ajoute un panneau de retour (champ feedback) pour savoir précisément ce qui "
+                 "bloque ou ce qui l'aiderait, avec des options concrètes liées à ce qu'il vient de faire.]")
+
+
+def feedback_due(messages: list[dict]) -> bool:
+    """Demande un panneau quand l'élève peine (2 messages de difficulté d'affilée) ou après 6 messages sans retour."""
+    if not messages or messages[-1]["role"] != "user" or messages[-1]["content"].startswith("[RETOUR]"):
+        return False
+    since = []  # messages depuis le dernier panneau
+    for m in reversed(messages):
+        if m["role"] != "user" and FEEDBACK_MARK in m["content"]:
+            break
+        since.append(m)
+    replies = [m for m in since if m["role"] != "user"]
+    if len(replies) < 3:  # au plus un panneau tous les 4 messages du tuteur
+        return False
+    users = [m["content"] for m in since if m["role"] == "user"]
+    return (len(users) >= 2 and all(STRUGGLE.search(u) for u in users[:2])) or len(users) >= 6
+
 COPIED_NOTE = ("\n[NOTE DU SYSTÈME : ce code est identique à un code que tu as montré à l'élève. Ce n'est PAS une réussite "
                "sans aide : ne compte rien dans successes. Dis-le gentiment et donne un exercice semblable avec d'autres valeurs, "
                "qu'il fera seul.]")
@@ -323,6 +353,8 @@ def reply(subject: str, theme: str, level: str, messages: list[dict], profile: d
     copied = copied_from_tutor(messages)
     if copied:
         messages = messages[:-1] + [{**messages[-1], "content": messages[-1]["content"] + COPIED_NOTE}]
+    elif feedback_due(messages):
+        messages = messages[:-1] + [{**messages[-1], "content": messages[-1]["content"] + FEEDBACK_NOTE}]
     key = plan_key(subject, theme, level, course)
     if profile.get("plan_key") != key:
         notions = plan_course(subject, theme, level, course)
@@ -356,6 +388,13 @@ def reply(subject: str, theme: str, level: str, messages: list[dict], profile: d
         ),
     )
     turn = (resp.parsed or TutorTurn.model_validate_json(resp.text)).model_dump()
+    # Panneau de retour : pas plus d'un tous les 4 messages du tuteur, et seulement avec de vraies options.
+    fb = turn.get("feedback") or {}
+    recent = [m["content"] for m in messages if m["role"] != "user"][-3:]
+    if not fb.get("question") or len(fb.get("options") or []) < 2 or any(FEEDBACK_MARK in c for c in recent):
+        turn["feedback"] = {"question": "", "options": [], "multiple": False}
+    else:
+        turn["feedback"] = {"question": fb["question"].strip(), "options": [o.strip() for o in fb["options"] if o.strip()][:6], "multiple": bool(fb.get("multiple"))}
     new = turn["profile"]
     for k in ("practice", "theory"):  # compteurs : jamais en baisse
         new[k] = max(int(profile.get(k, 0)), int(new.get(k, 0)))

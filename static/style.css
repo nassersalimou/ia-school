@@ -104,3 +104,10 @@ textarea { padding:10px; border-radius:8px; border:1px solid var(--muted); backg
 .intro { background:var(--card, #fff); border-radius:12px; padding:12px 14px; display:grid; gap:6px; }
 .intro p { margin:0; }
 .msg strong { font-weight:700; }
+.feedback { margin-top:10px; padding:10px 12px; border-radius:10px; background:var(--muted); display:grid; gap:8px; white-space:normal; }
+.fb-opts { display:flex; flex-wrap:wrap; gap:6px; }
+.fb-opt { padding:6px 12px; border-radius:999px; border:1px solid var(--accent); background:var(--card); color:var(--fg); font:inherit; font-size:.92rem; cursor:pointer; }
+.fb-opt.on { background:var(--accent); color:#fff; }
+.fb-send { justify-self:start; }
+.feedback small { opacity:.7; }
+.feedback.answered { opacity:.65; }

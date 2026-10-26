@@ -120,7 +120,9 @@ async function send(text) {
     }
     // Le code proposé reste dans l'historique pour que le tuteur sache ce qu'il a donné.
     const modeNote = j.mode ? `\n[MODE ${j.mode}${j.blocks?.length ? ` · palette : ${j.blocks.join(", ")}` : ""}]` : "";
-    history.push({ role: "model", content: (j.code ? `${j.reply}\n[CODE PROPOSÉ POUR L'ÉDITEUR]\n\`\`\`\n${j.code}\n\`\`\`` : j.reply) + modeNote });
+    const fb = j.feedback && j.feedback.question && j.feedback.options?.length ? j.feedback : null;
+    const fbNote = fb ? `\n[PANNEAU DE RETOUR] ${fb.question} (${fb.options.join(" / ")})` : "";
+    history.push({ role: "model", content: (j.code ? `${j.reply}\n[CODE PROPOSÉ POUR L'ÉDITEUR]\n\`\`\`\n${j.code}\n\`\`\`` : j.reply) + modeNote + fbNote });
     const done = (p) => (p?.plan || []).filter((n) => n.status === "mastered").map((n) => n.name);
     const before = done(profile);
     const fresh = done(j.profile).filter((n) => !before.includes(n));
@@ -134,8 +136,45 @@ async function send(text) {
     try { localStorage.setItem(pkey(), JSON.stringify(profile)); } catch (e) {}
     showProfile();
     const d = add("model", j.reply);
+    if (fb) feedbackPanel(d, fb);
     if (isCode()) applyTutor(j, d);
   } catch (e) { wait.remove(); add("model", "Erreur réseau."); }
+}
+
+// Question de retour du tuteur : réponses à cliquer (une ou plusieurs), envoyées en « [RETOUR] ».
+function feedbackPanel(msg, fb) {
+  const box = document.createElement("div");
+  box.className = "feedback";
+  const q = document.createElement("b");
+  q.textContent = `💬 ${fb.question}`;
+  const opts = document.createElement("div");
+  opts.className = "fb-opts";
+  const picked = new Set();
+  const ok = document.createElement("button");
+  ok.type = "button"; ok.className = "fb-send"; ok.textContent = "Envoyer ma réponse"; ok.disabled = true;
+  const done = (answers) => {
+    box.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    box.classList.add("answered");
+    send(`[RETOUR] ${fb.question} → ${answers.join(" ; ")}`);
+  };
+  fb.options.forEach((o) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "fb-opt"; b.textContent = o;
+    b.onclick = () => {
+      if (!fb.multiple) { b.classList.add("on"); done([o]); return; }
+      picked.has(o) ? picked.delete(o) : picked.add(o);
+      b.classList.toggle("on", picked.has(o));
+      ok.disabled = !picked.size;
+    };
+    opts.appendChild(b);
+  });
+  ok.onclick = () => done([...picked]);
+  const hint = document.createElement("small");
+  hint.textContent = fb.multiple ? "Plusieurs réponses possibles. Tu peux aussi répondre en écrivant." : "Tu peux aussi répondre en écrivant.";
+  box.append(q, opts, ...(fb.multiple ? [ok] : []), hint);
+  msg.appendChild(box);
+  if (window.renderMathInElement) renderMathInElement(box, { delimiters: [{ left: "$", right: "$", display: false }] });
+  box.scrollIntoView({ block: "end" });
 }
 
 const toBase64 = (buf) => {
@@ -190,7 +229,7 @@ const isCode = () => /\b(nsi|snt)\b|num[ée]rique|informatique|python|programm|j
 let worker = null, killTimer = null, ranCode = null, loadedCode = "", runDone = null, running = null;
 // Modes d'exercice : texte (clavier), blocs (libre), puzzle (blocs imposés mélangés), papier (écrit à la main, photographié).
 let mode = "texte", paperCode = "";
-const V = "19"; // version des fichiers statiques (cache)
+const V = "21"; // version des fichiers statiques (cache)
 
 const script = (src) => new Promise((ok, ko) => {
   const s = document.createElement("script");
