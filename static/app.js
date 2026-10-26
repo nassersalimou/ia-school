@@ -238,7 +238,7 @@ const isCode = () => /\b(nsi|snt)\b|num[ée]rique|informatique|python|programm|j
 let worker = null, killTimer = null, ranCode = null, loadedCode = "", runDone = null, running = null;
 // Modes d'exercice : texte (clavier), blocs (libre), puzzle (blocs imposés mélangés), papier (écrit à la main, photographié).
 let mode = "texte", paperCode = "";
-const V = "24"; // version des fichiers statiques (cache)
+const V = "27"; // version des fichiers statiques (cache)
 
 const script = (src) => new Promise((ok, ko) => {
   const s = document.createElement("script");

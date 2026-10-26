@@ -19,11 +19,17 @@ class Correction(BaseModel):
     categorie: str = Field(description="grammaire, conjugaison, vocabulaire, orthographe, prépositions, ordre des mots, style ou compréhension")
 
 
+class Speaker(BaseModel):
+    name: str = Field(description="Prénom tel qu'il apparaît devant les répliques du passage")
+    gender: str = Field(description="F (femme) ou M (homme), pour choisir une voix crédible")
+
+
 class EnglishTurn(BaseModel):
     reply: str = Field(description="Ce que tu dis ou écris à l'élève (voir le mode)")
     corrections: list[Correction] = Field(description="Erreurs du DERNIER message de l'élève, vide s'il n'y en a pas ou s'il n'a encore rien écrit")
     score: str = Field(description="Écrit : « 14/20 — commentaire » quand tu corriges une copie ; écoute : « 4/5 » quand tu corriges des réponses ; vide sinon")
     passage: str = Field(description="Compréhension orale UNIQUEMENT : texte à lire à voix haute pour un nouvel exercice ; vide sinon")
+    speakers: list[Speaker] = Field(description="Compréhension orale : chaque personne qui parle dans le passage (vide pour une narration à une voix)")
     level: str = Field(description="Niveau CECRL réel estimé de l'élève : A1, A2, B1, B2, C1 ou C2")
     summary: str = Field(description="Uniquement à la FIN DE SÉANCE : bilan en français ; vide sinon")
 
@@ -46,13 +52,17 @@ MODE_PROMPTS = {
 - Quand l'élève rend sa copie : `corrections` exhaustives ; `score` = note sur 20 et commentaire d'une ligne (respect du sujet et de la longueur, richesse, correction de la langue) ; `reply` en français : 2 points forts, 2 axes de progrès, puis 1 ou 2 phrases de sa copie réécrites plus naturellement (en anglais). Termine en proposant de réécrire sa copie ou de demander un nouveau sujet.
 - Si c'est une réécriture, dis ce qui s'est amélioré.""",
     "oral": """MODE CONVERSATION ORALE (ses messages viennent de la reconnaissance vocale) :
-- `reply` = ta réplique PARLÉE, en anglais uniquement, naturelle et vivante : 1 à 3 phrases, souvent terminée par une question ouverte pour relancer. Pas de listes, pas de mise en forme, pas d'émojis (le texte est lu à voix haute).
+- `reply` = ta réplique PARLÉE, en anglais uniquement : 1 à 3 phrases, souvent terminée par une question ouverte pour relancer. Pas de listes, pas de mise en forme, pas d'émojis : le texte est lu par une voix de synthèse très naturelle.
+- PARLE COMME UNE VRAIE PERSONNE (transcription d'une vraie conversation, pas un texte écrit) : contractions (I'm, you've, gonna si niveau B2+), petits mots d'hésitation (um, uh, well, you know, I mean, like), pauses avec « … », une auto-correction de temps en temps (« I went to — well, actually we drove there »), une répétition ou une phrase reprise (« it was, it was amazing »), réactions spontanées (oh, wow, ha, right, hmm). Dose selon son niveau : A1-A2 une hésitation par réplique et phrases simples ; dès B1 au moins deux ou trois marqueurs par réplique (hésitation, reprise, réaction) ; B2 et plus, rythme naturel complet. Ces hésitations restent du bon anglais parlé : aucune vraie faute de grammaire.
 - Premier tour : salue-le et lance le sujet souhaité (ou propose-en un concret et adapté).
 - Ne relève PAS les défauts dus à la transcription vocale (majuscules, ponctuation, mots d'hésitation) ; relève la grammaire, le vocabulaire et les tournures.
 - S'il parle français ou cherche un mot, aide-le en anglais simple et donne-lui le mot. S'il veut changer de sujet (« [SUJET] … »), enchaîne naturellement.
 - Fais-le parler plus que toi.""",
     "ecoute": """MODE COMPRÉHENSION ORALE :
-- Nouvel exercice (début, ou après une correction) : `passage` = un texte à écouter EN ANGLAIS (dialogue ou court récit vivant sur le thème souhaité, environ {passage_words} mots, niveau + 1) ; `reply` = 3 à 5 questions numérotées en anglais (questions ouvertes ou « true or false, justify »), sans jamais recopier le texte. L'élève ne voit pas le texte, il l'écoute.
+- Nouvel exercice (début, ou après une correction) : `passage` = un document AUDIO authentique EN ANGLAIS sur le thème souhaité, environ {passage_words} mots, niveau + 1 ; `reply` = 3 à 5 questions numérotées en anglais (questions ouvertes ou « true or false, justify »), sans jamais recopier le texte. L'élève ne voit pas le texte, il l'écoute.
+- VARIE LE FORMAT d'un exercice à l'autre : extrait de podcast entre deux animateurs, interview radio, conversation de la vie courante (café, gare, téléphone), narration de documentaire, message vocal, témoignage. Annonce le format en une ligne en tête de `reply` (ex. « 🎙️ Podcast extract »).
+- FORMAT DU PASSAGE : s'il y a plusieurs personnes, une réplique par ligne sous la forme « Prénom: texte » (2 ou 3 personnes, prénoms anglais, au moins une femme et un homme). Narration, documentaire ou message vocal : texte simple sans nom, en paragraphes.
+- RÉALISME : dans les formats parlés, écris comme les gens parlent vraiment : hésitations (um, uh, you know, I mean), « … » pour les pauses, une auto-correction ou un faux départ de temps en temps, quelqu'un qui coupe la parole (« — »), réactions (oh really?, ha, right). Moins en A1-A2, naturel complet en B2+. Remplis `speakers` avec le prénom et le genre de chaque personne. Le documentaire reste fluide et soigné.
 - Quand l'élève répond : `score` = « x/N » (bonnes réponses, sens compris) ; `corrections` = ses erreurs de langue ; `reply` en français : pour chaque question, juste ou non avec la bonne réponse et la phrase du texte qui la justifie. Puis annonce le prochain exercice : un peu plus difficile s'il a presque tout juste, même niveau sinon (il le demandera avec « [SUIVANT] »).""",
 }
 
@@ -82,7 +92,7 @@ def reply(mode: str, school: str, cefr: str, topic: str, words: int, messages: l
     if turn["level"] not in CEFR:
         turn["level"] = cefr
     if mode != "ecoute":
-        turn["passage"] = ""
+        turn["passage"], turn["speakers"] = "", []
     # Une correction doit citer le texte de l'élève : on écarte celles qui n'y figurent pas (inventées ou reformulées).
     last = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     turn["corrections"] = [c for c in turn["corrections"] if c["original"].strip() and c["original"].strip().lower() in last.lower()]

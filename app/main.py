@@ -2,11 +2,11 @@ import base64
 import os
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import english, tutor
+from . import english, tutor, voice
 from .subjects import LEVELS, SUBJECTS
 
 app = FastAPI(title="IA School")
@@ -99,6 +99,26 @@ def english_turn(req: EnglishRequest):
         return english.reply(req.mode, req.level, req.cefr, req.topic, req.words, [m.model_dump() for m in req.messages])
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erreur IA : {e}")
+
+
+class TtsRequest(BaseModel):
+    text: str
+    voice: str = ""
+
+
+@app.get("/api/voices", dependencies=[Depends(check_access)])
+def voices():
+    return {"voices": [{"name": n, "label": l, "gender": g} for n, l, g in voice.VOICES]}
+
+
+@app.post("/api/tts", dependencies=[Depends(check_access)])
+def tts(req: TtsRequest):
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="Texte vide")
+    try:
+        return Response(voice.synthesize(req.text, req.voice), media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=86400"})
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erreur voix : {e}")
 
 
 app.mount("/", StaticFiles(directory=Path(__file__).parent.parent / "static", html=True), name="static")

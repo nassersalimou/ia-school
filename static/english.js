@@ -1,6 +1,6 @@
 /* Anglais : trois modes imposés, choisis au départ (expression écrite, conversation orale, compréhension orale).
    Le serveur (/api/english) renvoie la réplique, les corrections du dernier message, le niveau CECRL estimé et,
-   en fin de séance, un bilan. Voix : synthèse et reconnaissance vocales du navigateur, en anglais. */
+   en fin de séance, un bilan. Voix : voix naturelles générées par le serveur (/api/tts), micro par la reconnaissance vocale du navigateur. */
 (function (root) {
   "use strict";
   const $ = (id) => document.getElementById(id);
@@ -116,35 +116,111 @@
   function errorsOf(j) { (j.corrections || []).forEach((c) => { S.errors[c.categorie] = (S.errors[c.categorie] || 0) + 1; }); log(); }
 
   // ---------------- Voix ----------------
+  // Voix naturelles générées par le serveur (Chirp 3 HD, /api/tts) ; la voix du navigateur ne sert qu'en secours.
   const synth = root.speechSynthesis;
-  function englishVoices() {
-    if (!synth) return [];
-    const vs = synth.getVoices().filter((v) => /^en[-_]/i.test(v.lang));
-    const rank = (v) => (/natural|neural|online/i.test(v.name) ? 0 : /google/i.test(v.name) ? 1 : 2) + (/en[-_]GB/i.test(v.lang) ? 0 : 0.5);
-    return vs.sort((a, b) => rank(a) - rank(b));
-  }
-  function fillVoices() {
+  let VOICES = [];
+  async function loadVoices() {
+    if (VOICES.length) return;
+    try { VOICES = (await (await fetch("/api/voices", { headers: S.headers() })).json()).voices || []; } catch (e) { VOICES = []; }
     const sel = $("en-voice");
-    const vs = englishVoices();
-    const keep = store.get("en:voice", "");
     sel.innerHTML = "";
-    vs.forEach((v) => { const o = el("option", "", `${v.name.replace(/Microsoft |Google /, "")} (${v.lang})`); o.value = v.name; sel.appendChild(o); });
-    if (vs.some((v) => v.name === keep)) sel.value = keep;
-    sel.hidden = !vs.length;
+    VOICES.forEach((v) => { const o = el("option", "", v.label); o.value = v.name; sel.appendChild(o); });
+    const keep = store.get("en:voice2", "");
+    if (VOICES.some((v) => v.name === keep)) sel.value = keep;
+    sel.hidden = !VOICES.length;
   }
-  function speak(text, rate) {
+  const myVoice = () => $("en-voice").value || (VOICES[0] && VOICES[0].name) || "";
+
+  // Phrases regroupées par morceaux d'environ 220 caractères : le premier morceau arrive vite, la suite se prépare pendant la lecture.
+  function chunks(text) {
+    const out = [];
+    for (const s of text.replace(/\s+/g, " ").match(/[^.!?…]+[.!?…]+["')\]]*\s*|[^.!?…]+$/g) || []) {
+      if (out.length && (out[out.length - 1] + s).length < 220) out[out.length - 1] += s; else out.push(s);
+    }
+    return out.map((t) => t.trim()).filter(Boolean);
+  }
+  const audioCache = new Map();
+  function fetchAudio(text, voice) {
+    const k = `${voice}|${text}`;
+    if (!audioCache.has(k)) {
+      audioCache.set(k, fetch("/api/tts", { method: "POST", headers: S.headers(), body: JSON.stringify({ text, voice }) })
+        .then((r) => { if (!r.ok) throw new Error("voix indisponible"); return r.blob(); })
+        .then((b) => URL.createObjectURL(b))
+        .catch((e) => { audioCache.delete(k); throw e; }));
+    }
+    return audioCache.get(k);
+  }
+  // Prépare à l'avance l'audio d'une liste de morceaux [{text, voice}].
+  function prefetch(parts) {
+    // Une phrase après l'autre : la lecture d'un morceau dure plus longtemps que la préparation du suivant.
+    parts.reduce((chain, p) => chain.then(() => fetchAudio(p.text, p.voice).catch(() => {})), Promise.resolve());
+  }
+
+  let current = null; // lecture en cours : { audio, stopped }
+  function stopAudio() {
+    if (current) { current.stopped = true; current.audio && current.audio.pause(); current = null; }
+    synth && synth.cancel();
+  }
+  async function playParts(parts, rate) {
+    stopAudio();
+    const me = (current = { audio: null, stopped: false });
+    S.speaking = true; updateMic();
+    try {
+      for (let i = 0; i < parts.length && !me.stopped; i++) {
+        if (parts[i + 1]) fetchAudio(parts[i + 1].text, parts[i + 1].voice).catch(() => {});
+        let url;
+        try { url = await fetchAudio(parts[i].text, parts[i].voice); } catch (e) { await browserSpeak(parts[i].text, rate); continue; }
+        if (me.stopped) break;
+        const a = (me.audio = new Audio(url));
+        a.playbackRate = rate; a.preservesPitch = true;
+        await new Promise((res) => { a.onended = a.onerror = res; a.play().catch(res); });
+        // Petite respiration quand la personne qui parle change.
+        if (parts[i + 1] && parts[i + 1].voice !== parts[i].voice) await new Promise((r) => setTimeout(r, 250));
+      }
+    } finally {
+      if (current === me) current = null;
+      S.speaking = false; updateMic();
+    }
+  }
+  function browserSpeak(text, rate) {
     if (!synth) return Promise.resolve();
-    synth.cancel();
     return new Promise((resolve) => {
       const u = new SpeechSynthesisUtterance(text);
-      const v = englishVoices().find((x) => x.name === $("en-voice").value) || englishVoices()[0];
-      if (v) u.voice = v;
-      u.lang = v ? v.lang : "en-GB";
-      u.rate = rate || Number($("en-rate").value) || 0.95;
-      u.onend = u.onerror = () => { S && (S.speaking = false); updateMic(); resolve(); };
-      S.speaking = true; updateMic();
+      u.lang = "en-GB"; u.rate = rate;
+      u.onend = u.onerror = resolve;
       synth.speak(u);
     });
+  }
+  const rateOf = () => Number($("en-rate").value) || 1;
+  function speak(text) { return playParts(chunks(text).map((t) => ({ text: t, voice: myVoice() })), rateOf()); }
+
+  // Passage d'écoute : « Prénom: réplique » sur chaque ligne = dialogue, une voix par personne (femmes et hommes alternés).
+  function passageParts(passage) {
+    const lines = passage.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const said = lines.map((l) => /^([A-Z][A-Za-z .'-]{0,24}):\s*(.+)$/.exec(l));
+    const dialogue = said.filter(Boolean).length >= 2;
+    const fem = VOICES.filter((v) => v.gender === "F").map((v) => v.name), men = VOICES.filter((v) => v.gender === "M").map((v) => v.name);
+    const pool = [fem[0], men[0], fem[1], men[1], fem[2], men[2]].filter(Boolean);
+    // Genre donné par le professeur pour chaque personne : une voix de femme ou d'homme différente pour chacune.
+    const genderOf = new Map((S.speakers || []).map((s) => [s.name.trim().toLowerCase(), s.gender]));
+    const used = { F: 0, M: 0 };
+    const who = new Map();
+    const voiceFor = (name) => {
+      if (!who.has(name)) {
+        const g = genderOf.get(name.toLowerCase());
+        const list = g === "F" ? fem : g === "M" ? men : null;
+        who.set(name, (list && list[used[g]++ % list.length]) || pool[who.size % pool.length] || myVoice());
+      }
+      return who.get(name);
+    };
+    const narrator = men.find((n) => /Orus/.test(n)) || myVoice();
+    const parts = [];
+    lines.forEach((l, i) => {
+      const m = dialogue && said[i];
+      const voice = m ? voiceFor(m[1].trim()) : narrator;
+      chunks(m ? m[2] : l).forEach((t) => parts.push({ text: t, voice }));
+    });
+    return parts;
   }
 
   // ---------------- Conversation orale ----------------
@@ -159,7 +235,7 @@
   }
   function startMic() {
     if (!SR || S.busy) return;
-    synth && synth.cancel();
+    stopAudio();
     heard = "";
     rec = new SR();
     rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true;
@@ -211,6 +287,9 @@
     const j = await turn(first ? "" : "[SUIVANT]", { waitText: "⏳ Le professeur prépare un texte…" });
     if (!j) return;
     S.passage = j.passage || ""; S.plays = 0; S.answered = false;
+    S.speakers = j.speakers || [];
+    S.parts = passageParts(S.passage);
+    prefetch(S.parts); // l'audio se prépare pendant que l'élève lit les questions
     $("en-passage").hidden = true; $("en-passage").textContent = S.passage;
     $("en-reveal").hidden = true; $("en-plays").textContent = ""; $("en-answers").value = "";
     tutorMsg(j);
@@ -220,7 +299,7 @@
     if (!S.passage) return;
     S.plays++;
     $("en-plays").textContent = `écouté ${S.plays} fois`;
-    await speak(S.passage, $("en-slow").checked ? 0.75 : 0.95);
+    await playParts(S.parts, $("en-slow").checked ? 0.8 : 1);
   }
   async function sendAnswers() {
     const text = $("en-answers").value.trim();
@@ -236,7 +315,7 @@
 
   // ---------------- Fin de séance ----------------
   async function end() {
-    stopMic(); synth && synth.cancel();
+    stopMic(); stopAudio();
     const j = await turn("[FIN DE SÉANCE]", { waitText: "⏳ Le professeur prépare ton bilan…" });
     if (!j) return;
     const box = el("div", "en-msg en-summary");
@@ -271,18 +350,17 @@
     $("en-newtopic").onclick = async () => { const j = await turn("[NOUVEAU SUJET]", { waitText: "⏳ Nouveau sujet…" }); if (j) { tutorMsg(j); $("en-text").value = ""; updateCount(); } };
     $("en-mic").onclick = () => (rec ? stopMic() : startMic());
     $("en-form").onsubmit = (e) => { e.preventDefault(); const t = $("en-input").value.trim(); if (t && !S.busy) { $("en-input").value = ""; say(t); } };
-    $("en-voice").onchange = () => store.set("en:voice", $("en-voice").value);
+    $("en-voice").onchange = () => { store.set("en:voice2", $("en-voice").value); speak("Hi! This is how I sound. Shall we keep talking?"); };
     $("en-showtext").onchange = () => document.querySelectorAll("#en-log .tutor .en-text").forEach((t) => t.classList.toggle("masked", !$("en-showtext").checked));
     $("en-play").onclick = playPassage;
     $("en-reveal").onclick = () => { $("en-passage").hidden = !$("en-passage").hidden; };
     $("en-send-answers").onclick = sendAnswers;
     $("en-next").onclick = () => newPassage(false);
-    if (synth) { fillVoices(); synth.onvoiceschanged = fillVoices; }
   }
 
   async function start(opts) {
     wire();
-    stopMic(); synth && synth.cancel();
+    stopMic(); stopAudio();
     S = { ...opts, id: Date.now().toString(36), cefr: store.get("en:cefr", ""), history: [], busy: false, speaking: false, passage: "", plays: 0, errors: {} };
     $("en-log").innerHTML = "";
     $("en-title").textContent = TITLES[S.mode];
@@ -294,13 +372,14 @@
     $("en-words2").value = String(S.words);
     $("en-text").value = "";
     updateCount(); updateMic();
+    await loadVoices();
     if (S.mode === "ecoute") return newPassage(true);
     const j = await turn("", { waitText: S.mode === "ecrit" ? "⏳ Le professeur prépare ton sujet…" : "⏳ Le professeur arrive…" });
     if (!j) return;
     tutorMsg(j, { speak: S.mode === "oral", hidden: S.mode === "oral" && !$("en-showtext").checked });
     if (S.mode === "oral") speak(j.reply);
   }
-  function stop() { stopMic(); synth && synth.cancel(); }
+  function stop() { stopMic(); stopAudio(); }
 
   root.English = { start, stop };
 })(window);
