@@ -23,8 +23,12 @@ Tests d'Algo Lab : `node algo_lab/test/check.js` (chaque correction doit passer 
 
 ## Mise en ligne
 
-- **Algo Lab** : publié automatiquement sur GitHub Pages à chaque push (`.github/workflows/pages.yml`).
-- **IA School** : sur Render, *New + → Blueprint* puis choisir ce dépôt (`render.yaml`). Render demande `GEMINI_API_KEY` et `ACCESS_CODE`. L'offre gratuite met le site en veille après 15 min sans visite : le premier chargement suivant prend environ 1 minute.
+- **Algo Lab** : https://nassersalimou.github.io/ia-school/ (GitHub Pages, publié automatiquement à chaque push par `.github/workflows/pages.yml`).
+- **IA School** : https://ia-school-92213625263.europe-west1.run.app (Google Cloud Run + Vertex AI, code d'accès demandé), disponible jusqu'au 10/12/2026 environ, fin de l'accès Google Cloud.
+  ```bash
+  gcloud run deploy ia-school --source . --region europe-west1
+  ```
+- Après Google Cloud : Render (`render.yaml`, *New + → Blueprint*, avec `GEMINI_API_KEY` et `ACCESS_CODE`) ou une fonction Supabase.
 
 ## Suivi des utilisations
 
