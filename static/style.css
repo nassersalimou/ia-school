@@ -37,6 +37,8 @@ textarea { padding:10px; border-radius:8px; border:1px solid var(--muted); backg
 #plan li.current::before { content:"▶ "; }
 #plan li.mastered { opacity:1; background:#c8ecd0; color:#063; border-color:transparent; }
 #plan li.mastered::before { content:"✓ "; }
+.end-banner { justify-self:stretch; max-width:none; text-align:center; background:#fff4d6; color:#5a3b00; border:2px solid #f0b429; }
+.end-banner p { margin:6px 0 10px; }
 .msg.event { justify-self:center; background:#c8ecd0; color:#063; font-weight:600; }
 #timer { font-size:.85rem; padding:0 0 8px; opacity:.8; }
 .note { margin:0; font-size:.85rem; opacity:.8; }

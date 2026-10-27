@@ -321,8 +321,8 @@
     const box = el("div", "en-msg en-summary");
     box.append(el("b", "", "📋 Bilan de la séance"), rich(j.summary || j.reply));
     $("en-log").appendChild(box);
-    box.scrollIntoView({ block: "end" });
     log(j.summary);
+    root.endBanner && root.endBanner($("en-log"));
   }
 
   // Journal d'utilisation (usage.js) : une entrée par séance d'anglais.

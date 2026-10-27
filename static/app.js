@@ -12,6 +12,12 @@ function startTimer() {
   const render = () => {
     const left = Math.max(0, total * 60 - (Date.now() - startedAt) / 1000);
     $("timer").textContent = `⏱ ${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")} restant`;
+    if (left > 0) return;
+    // Temps écoulé : on prévient l’élève et on demande le bilan au tuteur.
+    clearInterval(tick);
+    $("timer").textContent = "⏰ Temps écoulé";
+    add("model", "⏰ Le temps prévu est écoulé ! Le tuteur prépare ton bilan.", "event");
+    send("[FIN DE SÉANCE] Le temps est écoulé : fais le bilan de la séance, sans nouvel exercice.");
   };
   render();
   tick = setInterval(render, 1000);
@@ -147,8 +153,23 @@ async function send(text) {
     const d = add("model", j.reply);
     if (fb) feedbackPanel(d, fb);
     if (isCode()) applyTutor(j, d);
+    if (text.startsWith("[FIN DE SÉANCE]")) endBanner();
   } catch (e) { wait.remove(); add("model", "Erreur réseau."); }
 }
+
+// Bandeau de fin de séance : la séance est terminée, l’élève peut en commencer une autre.
+function endBanner(target = $("log"), onNew = back) {
+  clearInterval(tick);
+  const box = document.createElement("div");
+  box.className = "msg end-banner";
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = "Commencer une nouvelle séance"; b.onclick = onNew;
+  box.append(Object.assign(document.createElement("b"), { textContent: "🏁 Séance terminée, bravo pour ton travail !" }),
+    Object.assign(document.createElement("p"), { textContent: "Ton bilan est juste au-dessus. Tu peux fermer la page ou recommencer quand tu veux." }), b);
+  target.appendChild(box);
+  box.scrollIntoView({ block: "end" });
+}
+window.endBanner = endBanner;
 
 // Question de retour du tuteur : réponses à cliquer (une ou plusieurs), envoyées en « [RETOUR] ».
 function feedbackPanel(msg, fb) {
@@ -238,7 +259,7 @@ const isCode = () => /\b(nsi|snt)\b|num[ée]rique|informatique|python|programm|j
 let worker = null, killTimer = null, ranCode = null, loadedCode = "", runDone = null, running = null;
 // Modes d'exercice : texte (clavier), blocs (libre), puzzle (blocs imposés mélangés), papier (écrit à la main, photographié).
 let mode = "texte", paperCode = "";
-const V = "27"; // version des fichiers statiques (cache)
+const V = "28"; // version des fichiers statiques (cache)
 
 const script = (src) => new Promise((ok, ko) => {
   const s = document.createElement("script");
