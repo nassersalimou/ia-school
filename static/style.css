@@ -91,7 +91,7 @@ textarea { padding:10px; border-radius:8px; border:1px solid var(--muted); backg
   body.coding #debug { flex:0 1 auto; max-height:26vh; overflow:auto; }
   body.coding #blocks-area { flex:1; }
   body.coding #blockly { flex:1; height:auto; min-height:200px; }
-  body.coding main#chat { max-width:1400px; height:calc(100dvh - 60px); min-height:620px; padding-bottom:12px; display:grid; column-gap:16px;
+  body.coding main#chat { max-width:1400px; height:calc(100dvh - 60px); min-height:480px; padding-bottom:12px; display:grid; column-gap:16px;
     grid-template-columns:minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows:auto auto auto minmax(260px, 1fr) auto auto; }
   /* Sur un écran peu haut, le plan des notions prenait toute la place du chat : une seule ligne qui défile. */
   body.coding #plan, body.coding #prof { flex-wrap:nowrap; overflow-x:auto; padding-bottom:6px; scrollbar-width:thin; }
